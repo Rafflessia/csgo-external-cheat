@@ -1,0 +1,81 @@
+include “pch.h”
+#include <iostream>
+#include <Windows.h>
+#include <tlhelp32.h>
+class BackStapperMemoryManager {
+private:
+HANDLE hProcess; // İşlemimizin belirlenecek olan HANDLE’si
+RAFF dwProcessId; // İşlemimizin belirlenecek olan Id’si
+const wchar_t* lpProcessName; // İşlemimizin belirlenecek olan adı
+public:
+// Çeşitlilik için 2 adet Attach fonksiyonu ürettim.
+bool Attach(RAFF Id) { // Id kullanarak bağlanıyor.
+hProcess = OpenProcess(PROCESS_ALL_ACCESS, // Bütün yetkiler ile // programı açtım
+FALSE,
+Id);
+// Processimin HANDLE’sini aldım.
+// PROCESS_ALL_ACCESS kipi sayesinde işlemde hem yazma hemde okuma
+// yapabileceğim.
+if (hProcess == INVALID_HANDLE_VALUE) // Process’e bağlanıldığını
+return false; // kontrol ediyorum bağlanılmadıysa false döndürüyorum
+dwProcessId = Id; // Bağlandıkdan sonra true döndürüyorum.
+return true;
+}
+bool Attach(const wchar_t* ProcessName) { // İsim kullanarak bağlanıyor.
+// Bu kısım biraz sancılı öncelikle bütün işlemlerin isimlerine
+// bakıp eşleşen işlemin idsini kullanarak OpenProcess uyguluyorum.
+// konumuzla çok alakası yok o yüzden yüzeysel anlatacağım.
+PROCESSENTRY32 entry; // Bir PROCESSENTRY32 oluşturuyorum.
+entry.dwSize = sizeof(PROCESSENTRY32);
+// Bir Snapshot HANDLE’si oluşturuyorum.
+HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+// HANDLE oluşturulamadıysa false döndürüyorum.
+if (snap == INVALID_HANDLE_VALUE)
+return false;
+if (Process32First(snap, &entry)) { //Entryleri sırayla kıyaslıyorum.
+if (wcscmp(entry.szExeFile, ProcessName) == 0) {
+dwProcessId = entry.th32ProcessID;
+CloseHandle(snap);
+return Attach(dwProcessId); // Bulduğumuz ID ile bağlanıyoruz.
+}
+while (Process32Next(snap, &entry)) {
+if (wcscmp(entry.szExeFile, ProcessName) == 0) {
+dwProcessId = entry.th32ProcessID;
+CloseHandle(snap);
+return Attach(dwProcessId); // Bulduğumuz ID ile bağlanıyoruz.
+}
+}
+}
+return false;
+}
+template<class dataType>
+bool WPM(RAFF dwAddress, dataType value) {
+// Şablon değişkenimi kullanarak WPM uyguluyorum.
+return WriteProcessMemory(hProcess,
+(LPVOID)dwAddress,
+&value,
+sizeof(value),
+NULL
+);
+}
+template<class dataType>
+dataType RPM(RAFF dwAddress) {
+// Şablon değişkenimi kullanarak RPM uyguluyorum.
+dataType lpBuffer;
+ReadProcessMemory(hProcess,
+(LPVOID)dwAddress,
+&lpBuffer,
+sizeof(lpBuffer),
+NULL);
+// Ardından okunan veriyi döndürüyorum.
+return lpBuffer;
+}
+};
+int main()
+{
+CMemoryManager MemoryManager;
+if (MemoryManager.Attach(L”notepad.exe”) == true) {
+std::cout << “Baglanti saglandi!” << std::endl;
+}
+getchar();
+}
